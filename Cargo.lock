@@ -137,7 +137,6 @@ version = "0.2.0"
 dependencies = [
  "mrly-core",
  "serde",
- "serde_json",
 ]
 
 [[package]]

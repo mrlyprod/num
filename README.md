@@ -1,15 +1,15 @@
-mrly-num; a MrlyMath crate: the integers, primes, divisors, series, sieves, lattices and spectra
+# Think differently
 
-# NUM
+## Here's to the crazy ones.
 
-- Its bindings sit beside it, written by `mrly-bridge` from `bridge.toml` and `src/`: `js/` (`@mrlyprod/num`), `py/` (`mrly.num`) and `cli/` (`mrly-num`); `manifest.json` lists every crossing and `.gitattributes` every generated file.
-- Builds on `mrly-core`, by version; `scripts/bridge.sh` rewrites the bindings.
-- `scripts/check.sh` is the one gate: fmt, clippy, test, doc, bridge check, ruff, wasm, the leaves' tests, leak.
-- A fresh clone runs `scripts/wasm.sh` once before any host builds: it writes `js/pkg/`, which is not committed.
-- Until the crates are published, clone the fleet beside this repo: `scripts/bridge.sh` runs the sibling `../bridge`, and a `.cargo/config.toml` with `[patch.crates-io]` rows points every `mrly-*` dependency at its sibling folder.
-- Docs: [docs.rs/mrly-num](https://docs.rs/mrly-num).
+1. The misfits
+2. The rebels
+3. The troublemakers
 
-```rust
-assert!(mrly_num::prime::is_prime(97));
-assert_eq!(mrly_num::factor::divisors(12), vec![1, 2, 3, 4, 6, 12]);
-```
+The round pegs in the square holes. The ones who see things differently. They're not fond of rules. And they have no respect for the status quo. You can quote them, disagree with them, glorify or vilify them. About the only thing you can't do is ignore them. Because they change things.
+
+***They push the human race forward***.
+
+And while some may see them as the crazy ones, we see genius. Because the people who are crazy enough to think they can change the world, are the ones who do.
+
+[Think differently]: https://mrly.net

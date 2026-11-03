@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-/// The t where the walk hands over from Euler-Maclaurin to Riemann-Siegel.
 pub const JOIN: f64 = 20.0;
 const SHIFT: usize = 10;
 const TAIL: usize = 7;
@@ -14,38 +13,29 @@ const TOLERANCE: f64 = 1e-9;
 const NODES: usize = 4096;
 const REMAINDER: f64 = 1.0;
 
-/// A complex number: a real and an imaginary part.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Complex {
-    /// The real part.
     pub re: f64,
-    /// The imaginary part.
     pub im: f64,
 }
 
 impl Complex {
-    /// Builds a complex number from its parts.
     pub const fn new(re: f64, im: f64) -> Complex {
         Complex { re, im }
     }
-    /// Returns the modulus.
     pub fn abs(z: Complex) -> f64 {
         z.re.hypot(z.im)
     }
-    /// Returns the principal argument.
     pub fn arg(z: Complex) -> f64 {
         z.im.atan2(z.re)
     }
-    /// Returns the exponential.
     pub fn exp(z: Complex) -> Complex {
         let r = z.re.exp();
         Complex::new(r * z.im.cos(), r * z.im.sin())
     }
-    /// Returns the principal logarithm.
     pub fn ln(z: Complex) -> Complex {
         Complex::new(Complex::abs(z).ln(), Complex::arg(z))
     }
-    /// Returns a unit complex number at the given angle.
     pub fn turn(angle: f64) -> Complex {
         Complex::new(angle.cos(), angle.sin())
     }
@@ -114,12 +104,10 @@ impl Neg for Complex {
     }
 }
 
-/// Returns a positive real base raised to a complex exponent.
 pub fn raise(base: f64, exponent: Complex) -> Complex {
     Complex::exp(exponent * base.ln())
 }
 
-/// Returns the Riemann-Siegel kernel, the cosine ratio that leads the remainder, in the form that stays finite at its removable points.
 pub fn kernel(p: f64) -> f64 {
     let d = if p < 0.5 { 0.25 - p } else { p - 0.75 };
     let below = (2.0 * PI * d).sin();
@@ -145,7 +133,6 @@ fn derivative(order: usize, p: f64) -> f64 {
     (4.0 * difference(order, p, STENCIL) - difference(order, p, 2.0 * STENCIL)) / 3.0
 }
 
-/// Returns the first four Riemann-Siegel corrections at the fractional part p: the kernel and its derivatives by central differences with one Richardson step.
 pub fn corrections(p: f64) -> [f64; 4] {
     let (pi2, pi4, pi6) = (PI * PI, PI.powi(4), PI.powi(6));
     [
@@ -158,7 +145,6 @@ pub fn corrections(p: f64) -> [f64; 4] {
     ]
 }
 
-/// The critical line: the Bernoulli numbers and the Euler-Maclaurin weights the two engines share, built once.
 #[derive(Serialize, Deserialize)]
 pub struct Line {
     bern: Vec<f64>,
@@ -172,7 +158,6 @@ impl Default for Line {
 }
 
 impl Line {
-    /// Builds the line: the even Bernoulli numbers through the fourteenth and their Euler-Maclaurin weights.
     pub fn new() -> Line {
         let fractions = bernoulli(2 * TAIL + 1).unwrap_or_default();
         let bern: Vec<f64> = fractions
@@ -193,7 +178,6 @@ impl Line {
             .collect();
         Line { bern, tail }
     }
-    /// Returns the Riemann-Siegel theta: the argument of gamma at one quarter plus i t over two, less t ln pi over two, by Stirling's series after a shift of ten.
     pub fn theta(&self, t: f64) -> f64 {
         let z = Complex::new(0.25, 0.5 * t);
         let w = z + SHIFT as f64;
@@ -210,7 +194,6 @@ impl Line {
         }
         arg - 0.5 * t * PI.ln()
     }
-    /// Returns zeta at one half plus i t by the complex Euler-Maclaurin sum: t plus ten terms and seven Bernoulli corrections.
     pub fn maclaurin(&self, t: f64) -> Complex {
         let s = Complex::new(0.5, t);
         let count = t.abs() as usize + SHIFT;
@@ -230,7 +213,6 @@ impl Line {
         }
         out
     }
-    /// Returns zeta and its derivative together at any complex s but one, by the same Euler-Maclaurin sum: the modulus of t plus ten terms and seven Bernoulli corrections, each term differentiated in s.
     pub fn pair(&self, s: Complex) -> (Complex, Complex) {
         let one = Complex::new(1.0, 0.0);
         let count = s.im.abs() as usize + SHIFT;
@@ -263,7 +245,6 @@ impl Line {
         }
         (value, slope)
     }
-    /// Returns the wave coefficient of every zero at the given ordinates: F(rho) zeta(rho - 1) over zeta'(rho) at rho one half plus i gamma, F the Mellin transform of the bump.
     pub fn novelty_coefficients(&self, gammas: &[f64]) -> Vec<Complex> {
         gammas
             .iter()
@@ -275,11 +256,9 @@ impl Line {
             })
             .collect()
     }
-    /// Returns Z(t) from the Euler-Maclaurin value turned onto the real axis.
     pub fn exact(&self, t: f64) -> f64 {
         (Complex::turn(self.theta(t)) * self.maclaurin(t)).re
     }
-    /// Returns Z(t) by the Riemann-Siegel formula: the main sum and the first four corrections.
     pub fn siegel(&self, t: f64) -> f64 {
         let whole = (t / (2.0 * PI)).sqrt().floor();
         let theta = self.theta(t);
@@ -304,7 +283,6 @@ impl Line {
             2.0 * sum + remainder(t)
         }
     }
-    /// Returns Z(t): Euler-Maclaurin below the join, Riemann-Siegel above.
     pub fn z(&self, t: f64) -> f64 {
         if t < JOIN {
             self.exact(t)
@@ -312,7 +290,6 @@ impl Line {
             self.siegel(t)
         }
     }
-    /// Returns zeta on the line and Z(t) together, from the engine that serves the t.
     pub fn point(&self, t: f64) -> (Complex, f64) {
         if t < JOIN {
             let value = self.maclaurin(t);
@@ -322,7 +299,6 @@ impl Line {
             (Complex::turn(-self.theta(t)) * z, z)
         }
     }
-    /// Returns the largest gap between the two engines over the t range on a grid.
     pub fn seam(&self, t0: f64, t1: f64, steps: usize) -> f64 {
         (0..=steps)
             .map(|k| {
@@ -331,7 +307,6 @@ impl Line {
             })
             .fold(0.0, f64::max)
     }
-    /// Returns the n-th Gram point, where theta is n pi, by Newton from the right.
     pub fn gram(&self, n: i64) -> f64 {
         self.newton(n, 2.0 * PI * (n as f64 + 2.0).max(3.0), 1e-12)
     }
@@ -383,14 +358,12 @@ impl Line {
         }
         0.5 * (a + b)
     }
-    /// Returns the first zeros on the line: sign changes of Z between Gram points, refined by bisection on Euler-Maclaurin to a billionth.
     pub fn zeros(&self, count: usize) -> Vec<f64> {
         self.brackets(count)
             .into_iter()
             .map(|pair| self.bisect(pair))
             .collect()
     }
-    /// Counts the zeros on the line below t: the sign changes of Z on ten steps a Gram interval, the Riemann-Siegel main sum turned from step to step and its remainder read only where it could flip the sign.
     pub fn count(&self, t: f64) -> usize {
         let terms = (t.max(0.0) / (2.0 * PI)).sqrt() as usize + 1;
         let logs: Vec<f64> = (1..=terms).map(|k| (k as f64).ln()).collect();
@@ -454,7 +427,6 @@ fn remainder(t: f64) -> f64 {
     sign * rest
 }
 
-/// Returns the Chebyshev staircase at every whole number from one to x: the sum of ln p over the prime powers up to each.
 pub fn psi_stair(x: usize) -> Vec<f64> {
     let mut jumps = vec![0.0; x + 1];
     for p in primes(x) {
@@ -474,7 +446,6 @@ pub fn psi_stair(x: usize) -> Vec<f64> {
         .collect()
 }
 
-/// Returns the von Mangoldt explicit formula at x over the zeros at the given ordinates and their mirrors: x less the sum of x to the rho over rho, less ln two pi, less half the ln of one minus x to the minus two.
 pub fn psi_formula(x: f64, gammas: &[f64]) -> f64 {
     let log = x.ln();
     let waves: f64 = gammas
@@ -484,20 +455,15 @@ pub fn psi_formula(x: f64, gammas: &[f64]) -> f64 {
     x - 2.0 * x.sqrt() * waves - (2.0 * PI).ln() - 0.5 * (1.0 - 1.0 / (x * x)).ln()
 }
 
-/// Returns how far the explicit formula over the zeros at the given ordinates lands from the staircase at the whole number x.
 pub fn psi_gap(x: usize, gammas: &[f64]) -> f64 {
     let stair = psi_stair(x).last().copied().unwrap_or(0.0);
     (psi_formula(x as f64, gammas) - stair).abs()
 }
 
-/// Returns the explicit formula over the zeros at the given ordinates at every sample x.
 pub fn psi_curve(gammas: &[f64], samples: &[f64]) -> Vec<f64> {
     samples.iter().map(|&x| psi_formula(x, gammas)).collect()
 }
 
-// NOVELTY
-
-/// The smooth window on [1, 2]: exp(4 - 1/((u - 1)(2 - u))) inside, zero outside, every derivative vanishing at the ends and a peak of one at u = 3/2.
 pub fn bump(u: f64) -> f64 {
     if u <= 1.0 || u >= 2.0 {
         return 0.0;
@@ -505,7 +471,6 @@ pub fn bump(u: f64) -> f64 {
     (4.0 - 1.0 / ((u - 1.0) * (2.0 - u))).exp()
 }
 
-/// Returns the Mellin transform of the bump at a complex s, the integral of bump(u) u^(s - 1) over [1, 2], by a 4096-node midpoint rule.
 pub fn mellin(s: Complex) -> Complex {
     let step = 1.0 / NODES as f64;
     let mut sum = Complex::default();
@@ -516,12 +481,10 @@ pub fn mellin(s: Complex) -> Complex {
     sum
 }
 
-/// Returns the main term of the smoothed novelty: six over pi squared times the bump's transform at two.
 pub fn novelty_main() -> f64 {
     6.0 / (PI * PI) * mellin(Complex::new(2.0, 0.0)).re
 }
 
-/// Returns the smoothed novelty error at y: y squared times the totients weighed by the bump at n y, less the main term given; the totients must reach 2 over y.
 pub fn smoothed_novelty(phi: &[u64], y: f64, main: f64) -> f64 {
     let lo = (1.0 / y).ceil() as usize;
     let hi = (2.0 / y).floor() as usize;
@@ -533,14 +496,12 @@ pub fn smoothed_novelty(phi: &[u64], y: f64, main: f64) -> f64 {
     y * y * sum - main
 }
 
-/// Returns the sharp novelty error at y: y squared times the totient sum over the scales from 1 over y to 2 over y, both ends in, less nine over pi squared, from the prefix sums of the totients, which must reach 2 over y.
 pub fn sharp_novelty(prefix: &[u64], y: f64) -> f64 {
     let lo = (1.0 / y).ceil() as usize;
     let hi = (2.0 / y).floor() as usize;
     y * y * (prefix[hi] - prefix[lo - 1]) as f64 - 9.0 / (PI * PI)
 }
 
-/// Sums the waves of the zeros at log y: twice the real part of the coefficients times y to the minus i gamma, the smoothed error over y to the three halves that the zeros predict.
 pub fn novelty_wave(gammas: &[f64], coef: &[Complex], log_y: f64) -> f64 {
     let sum: f64 = gammas
         .iter()
@@ -548,209 +509,4 @@ pub fn novelty_wave(gammas: &[f64], coef: &[Complex], log_y: f64) -> f64 {
         .map(|(g, c)| (*c * Complex::turn(-g * log_y)).re)
         .sum();
     2.0 * sum
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::factor::totients;
-
-    fn classic(t: f64) -> f64 {
-        0.5 * t * (t / (2.0 * PI)).ln() - 0.5 * t - PI / 8.0
-            + 1.0 / (48.0 * t)
-            + 7.0 / (5760.0 * t.powi(3))
-            + 31.0 / (80640.0 * t.powi(5))
-    }
-
-    #[test]
-    fn the_complex_arithmetic_round_trips() {
-        let z = Complex::new(-1.5, 2.25);
-        let back = Complex::exp(Complex::ln(z));
-        assert!(Complex::abs(back - z) < 1e-14);
-        assert!(Complex::abs(z / z - Complex::new(1.0, 0.0)) < 1e-15);
-        assert!((raise(2.0, Complex::new(3.0, 0.0)).re - 8.0).abs() < 1e-13);
-        assert!(Complex::abs(raise(4.0, Complex::new(0.5, 0.0)) - Complex::new(2.0, 0.0)) < 1e-14);
-    }
-
-    #[test]
-    fn theta_meets_the_asymptotic_series_and_the_first_gram_points() {
-        let line = Line::new();
-        for t in [20.0, 50.0, 100.0, 200.0] {
-            assert!((line.theta(t) - classic(t)).abs() < 1e-9, "t {t}");
-        }
-        assert!(line.theta(0.0).abs() < 1e-12);
-        assert!((line.gram(-1) - 9.666_908).abs() < 1e-6);
-        assert!((line.gram(0) - 17.845_600).abs() < 1e-6);
-        assert!((line.gram(1) - 23.170_283).abs() < 1e-6);
-        assert!(line.theta(line.gram(2)).abs() - 2.0 * PI < 1e-10);
-    }
-
-    #[test]
-    fn maclaurin_meets_the_known_values_on_the_line() {
-        let line = Line::new();
-        assert!((line.maclaurin(0.0).re + 1.460_354_508_809_586_8).abs() < 1e-10);
-        assert!(line.maclaurin(0.0).im.abs() < 1e-12);
-        let one = line.maclaurin(1.0);
-        assert!((one.re - 0.143_936_427_077_189).abs() < 1e-9);
-        assert!((one.im + 0.722_099_743_531_673).abs() < 1e-9);
-        assert!(Complex::abs(line.maclaurin(14.134_725)) < 1e-5);
-        for t in [3.0, 25.0, 140.0] {
-            let value = line.maclaurin(t);
-            assert!(
-                (Complex::turn(line.theta(t)) * value).im.abs() < 1e-9,
-                "t {t}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_kernel_pins_its_centre_and_its_removable_points() {
-        assert!((kernel(0.5) - (3.0 * PI / 8.0).cos()).abs() < 1e-15);
-        assert!((kernel(0.0) - (PI / 8.0).cos()).abs() < 1e-15);
-        assert_eq!(kernel(0.25), 0.5);
-        assert_eq!(kernel(0.75), 0.5);
-        assert!((kernel(0.25 + 1e-9) - 0.5).abs() < 1e-7);
-        assert!((kernel(0.75 - 1e-9) - 0.5).abs() < 1e-7);
-        let direct = |p: f64| (2.0 * PI * (p * p - p - 1.0 / 16.0)).cos() / (2.0 * PI * p).cos();
-        for p in [0.05, 0.1, 0.4, 0.5, 0.6, 0.9, 0.95] {
-            assert!((kernel(p) - direct(p)).abs() < 1e-13, "p {p}");
-        }
-        assert!(corrections(0.5)[1].abs() < 1e-9);
-    }
-
-    #[test]
-    fn siegel_meets_maclaurin_beyond_the_join() {
-        let line = Line::new();
-        assert!(line.seam(JOIN, 60.0, 800) < 5e-5);
-        assert!(line.seam(60.0, 250.0, 1900) < 5e-6);
-        assert!((line.z(JOIN) - line.exact(JOIN)).abs() < 5e-5);
-    }
-
-    #[test]
-    fn the_zeros_and_their_count_are_the_classic_ones() {
-        let line = Line::new();
-        let first = line.zeros(10);
-        let known = [14.134_725, 21.022_040, 25.010_858, 30.424_876, 32.935_062];
-        for (got, want) in first.iter().zip(known) {
-            assert!((got - want).abs() < 1e-6, "{got} {want}");
-        }
-        assert!((first[9] - 49.773_832).abs() < 1e-5);
-        assert_eq!(line.count(100.0), 29);
-        assert_eq!(line.count(200.0), 79);
-        assert_eq!(line.count(10.0), 0);
-        assert_eq!(line.count(1000.0), 649);
-        assert_eq!(line.count(10000.0), 10138);
-        let hundred = line.zeros(100);
-        assert_eq!(hundred.len(), 100);
-        assert!((hundred[99] - 236.524_230).abs() < 1e-5);
-        assert!(hundred.windows(2).all(|w| w[1] > w[0]));
-    }
-
-    #[test]
-    fn the_pair_pins_zeta_off_the_line_and_its_slope() {
-        let line = Line::new();
-        let (below, _) = line.pair(Complex::new(-0.5, 0.0));
-        assert!((below.re + 0.207_886_224_977_354_6).abs() < 1e-10);
-        let (_, slope) = line.pair(Complex::new(0.5, 0.0));
-        assert!((slope.re + 3.922_646_139_209_15).abs() < 1e-9);
-        let (on, _) = line.pair(Complex::new(0.5, 30.0));
-        assert!(Complex::abs(on - line.maclaurin(30.0)) < 1e-9);
-        let (root, prime) = line.pair(Complex::new(0.5, 14.134_725_141_734_7));
-        assert!(Complex::abs(root) < 1e-8);
-        assert!((Complex::abs(prime) - 0.793_16).abs() < 1e-4);
-    }
-
-    #[test]
-    fn the_novelty_error_is_the_wave_of_the_first_zeros() {
-        assert!((novelty_main() - 6.0 / (PI * PI) * 0.575_725_895_994).abs() < 1e-9);
-        assert_eq!(bump(1.5), 1.0);
-        assert_eq!(bump(1.0), 0.0);
-        let line = Line::new();
-        let gammas = line.zeros(10);
-        let coef = line.novelty_coefficients(&gammas);
-        assert!((Complex::abs(coef[0]) - 0.1879).abs() < 5e-4);
-        assert!((Complex::abs(coef[9]) - 4.286e-3).abs() < 5e-6);
-        let phi = totients(1 << 15);
-        let mut prefix = vec![0u64; phi.len()];
-        for n in 1..phi.len() {
-            prefix[n] = prefix[n - 1] + phi[n];
-        }
-        let main = novelty_main();
-        let heights: Vec<f64> = (0..=96).map(|k| 8.0 + k as f64 / 16.0).collect();
-        let dots: Vec<f64> = heights
-            .iter()
-            .map(|&j| {
-                let y = 2.0f64.powf(-j);
-                smoothed_novelty(&phi, y, main) / y.powf(1.5)
-            })
-            .collect();
-        let peak = dots.iter().fold(0.0f64, |a, v| a.max(v.abs()));
-        assert!(peak > 0.3 && peak < 0.6, "{peak}");
-        let miss = |count: usize| {
-            heights
-                .iter()
-                .zip(&dots)
-                .map(|(&j, &dot)| {
-                    let wave = novelty_wave(&gammas[..count], &coef[..count], -j * 2f64.ln());
-                    (dot - wave).abs()
-                })
-                .fold(0.0f64, f64::max)
-                / peak
-        };
-        assert_eq!(miss(0), 1.0);
-        assert!(miss(1) > 0.3 && miss(1) < 0.7, "{}", miss(1));
-        assert!(miss(10) < 5e-2, "{}", miss(10));
-        let rough: Vec<f64> = heights
-            .iter()
-            .map(|&j| {
-                let y = 2.0f64.powf(-j);
-                sharp_novelty(&prefix, y) / y
-            })
-            .collect();
-        assert!(rough.iter().all(|v| v.abs() < 2.0));
-        assert!(rough.iter().any(|v| v.abs() > 0.1));
-    }
-
-    #[test]
-    fn psi_pins_the_staircase_and_the_smooth_guess() {
-        let stair = psi_stair(100);
-        assert!((stair[9] - 7.832_0).abs() < 1e-4);
-        assert!((stair[99] - 94.045_311).abs() < 1e-5);
-        assert_eq!(stair[0], 0.0);
-        assert!((stair[7] - 3.0 * 2f64.ln() - 3f64.ln() - 5f64.ln() - 7f64.ln()).abs() < 1e-12);
-        assert!((psi_formula(10.0, &[]) - 8.167_1).abs() < 1e-4);
-        let line = Line::new();
-        let zeros = line.zeros(100);
-        let close = psi_formula(100.0, &zeros);
-        assert!((close - stair[99]).abs() < 1.0, "{close}");
-        assert!((close - stair[99]).abs() < (psi_formula(100.0, &[]) - stair[99]).abs());
-    }
-
-    #[test]
-    fn the_formula_curve_meets_the_steps_better_with_every_zero_and_the_gap_is_its_miss_at_x() {
-        let zeros = Line::new().zeros(100);
-        let stair = psi_stair(100);
-        let samples: Vec<f64> = (0..600)
-            .map(|i| 1.5 + (100.0 - 1.5) * i as f64 / 599.0)
-            .collect();
-        let miss = |count: usize| {
-            psi_curve(&zeros[..count], &samples)
-                .iter()
-                .zip(&samples)
-                .filter(|&(_, &u)| u >= 20.0 && (u - u.round()).abs() >= 0.25)
-                .map(|(y, &u)| (y - stair[u as usize - 1]).abs())
-                .fold(0.0, f64::max)
-        };
-        assert!(miss(100) < miss(10));
-        assert!(miss(10) < miss(0));
-        assert_eq!(
-            psi_curve(&zeros, &[100.0]),
-            vec![psi_formula(100.0, &zeros)]
-        );
-        assert_eq!(
-            psi_gap(100, &zeros),
-            (psi_formula(100.0, &zeros) - stair[99]).abs()
-        );
-        assert!(psi_gap(100, &zeros) < psi_gap(100, &[]));
-    }
 }

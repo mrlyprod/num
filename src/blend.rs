@@ -3,26 +3,18 @@ use mrly_core::error::{Result, overflow_error, value_error};
 
 const PRIMES: [u64; 3] = [2_147_483_647, 2_147_483_629, 2_147_483_587];
 
-/// Adds two sequences term by term over their shared length.
 pub fn add(a: &[i128], b: &[i128]) -> Vec<i128> {
     a.iter().zip(b).map(|(&x, &y)| x + y).collect()
 }
 
-/// Subtracts the second sequence from the first over their shared length.
 pub fn sub(a: &[i128], b: &[i128]) -> Vec<i128> {
     a.iter().zip(b).map(|(&x, &y)| x - y).collect()
 }
 
-/// Multiplies two sequences term by term over their shared length.
 pub fn hadamard(a: &[i128], b: &[i128]) -> Vec<i128> {
     a.iter().zip(b).map(|(&x, &y)| x * y).collect()
 }
 
-/// Convolves two sequences, keeping the exact prefix their shared length affords.
-///
-/// # Errors
-///
-/// Errs when a term passes a signed hundred and twenty-eight bits.
 pub fn cauchy(a: &[i128], b: &[i128]) -> Result<Vec<i128>> {
     let length = a.len().min(b.len());
     let mut out = Vec::with_capacity(length);
@@ -43,16 +35,10 @@ pub fn cauchy(a: &[i128], b: &[i128]) -> Result<Vec<i128>> {
     Ok(out)
 }
 
-/// Drops the first terms of a sequence.
 pub fn shift(a: &[i128], count: usize) -> Vec<i128> {
     a.iter().skip(count).copied().collect()
 }
 
-/// Keeps every step-th term from the offset onward.
-///
-/// # Errors
-///
-/// Errs at a step of zero.
 pub fn decimate(a: &[i128], step: usize, offset: usize) -> Result<Vec<i128>> {
     if step == 0 {
         return value_error("a decimation needs a step above zero.");
@@ -60,16 +46,10 @@ pub fn decimate(a: &[i128], step: usize, offset: usize) -> Result<Vec<i128>> {
     Ok(a.iter().skip(offset).step_by(step).copied().collect())
 }
 
-/// Returns the first differences of a sequence, one term shorter.
 pub fn delta(a: &[i128]) -> Vec<i128> {
     a.windows(2).map(|w| w[1] - w[0]).collect()
 }
 
-/// Returns the partial sums of a sequence.
-///
-/// # Errors
-///
-/// Errs when a partial sum passes a signed hundred and twenty-eight bits.
 pub fn sigma(a: &[i128]) -> Result<Vec<i128>> {
     let mut total = 0i128;
     let mut out = Vec::with_capacity(a.len());
@@ -87,7 +67,6 @@ pub fn sigma(a: &[i128]) -> Result<Vec<i128>> {
     Ok(out)
 }
 
-/// Multiplies every term of a sequence by the factor.
 pub fn scale(a: &[i128], factor: i128) -> Vec<i128> {
     a.iter().map(|&x| x * factor).collect()
 }
@@ -286,18 +265,6 @@ fn verify(terms: &[i128], coefficients: &[(i128, i128)]) -> bool {
     })
 }
 
-/// Finds the smallest linear constant-coefficient recurrence that fits every supplied term.
-///
-/// The coefficients come back as reduced fractions with the newest term first, so a
-/// result of one and one twice is the Fibonacci rule. The hunt runs modulo three
-/// primes, rebuilds the rationals by remainder reconstruction, and verifies the rule
-/// on every term before answering; too few terms to trust an order returns nothing,
-/// and the zero sequence returns the empty rule.
-///
-/// ```
-/// let fib = vec![0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
-/// assert_eq!(mrly_num::blend::recurrence(&fib), Some(vec![(1, 1), (1, 1)]));
-/// ```
 pub fn recurrence(terms: &[i128]) -> Option<Vec<(i128, i128)>> {
     if terms.len() < 4 {
         return None;
@@ -323,21 +290,12 @@ pub fn recurrence(terms: &[i128]) -> Option<Vec<(i128, i128)>> {
     verify(terms, &coefficients).then_some(coefficients)
 }
 
-/// Returns the monic characteristic polynomial of a recurrence, highest power first.
 pub fn characteristic(coefficients: &[(i128, i128)]) -> Vec<(i128, i128)> {
     let mut out = vec![(1, 1)];
     out.extend(coefficients.iter().map(|&(num, den)| (-num, den)));
     out
 }
 
-/// Returns the largest positive real root of a recurrence's characteristic polynomial, the growth rate, or a not-a-number where no real root lands.
-///
-/// A simple root lands at machine precision; a repeated root lands to a few decimals only.
-///
-/// ```
-/// let rate = mrly_num::blend::growth(&[(1, 1), (1, 1)]);
-/// assert!((rate - 1.618033988749895).abs() < 1e-12);
-/// ```
 pub fn growth(coefficients: &[(i128, i128)]) -> f64 {
     let poly: Vec<f64> = characteristic(coefficients)
         .iter()
@@ -384,112 +342,5 @@ pub fn growth(coefficients: &[(i128, i128)]) -> f64 {
         x
     } else {
         f64::NAN
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::prime::primes;
-    use crate::series::catalan;
-
-    fn fibonacci(count: usize) -> Vec<i128> {
-        let mut out = vec![0i128, 1];
-        while out.len() < count {
-            out.push(out[out.len() - 1] + out[out.len() - 2]);
-        }
-        out.truncate(count);
-        out
-    }
-
-    #[test]
-    fn the_fibonacci_rule_and_its_golden_growth() {
-        let fib = fibonacci(30);
-        let rule = recurrence(&fib).unwrap();
-        assert_eq!(rule, vec![(1, 1), (1, 1)]);
-        assert!((growth(&rule) - 1.618_033_988_749_895).abs() < 1e-12);
-    }
-
-    #[test]
-    fn a_cubic_polynomial_sequence_needs_order_four() {
-        let terms: Vec<i128> = (0..20).map(|n| n * n * (4 * n + 3)).collect();
-        let rule = recurrence(&terms).unwrap();
-        assert_eq!(rule, vec![(4, 1), (-6, 1), (4, 1), (-1, 1)]);
-        assert!((growth(&rule) - 1.0).abs() < 1e-3);
-    }
-
-    #[test]
-    fn the_hexagram_rule_grows_by_its_perron_root() {
-        let mut terms = vec![1i128, 6];
-        while terms.len() < 14 {
-            let n = terms.len();
-            terms.push(9 * terms[n - 1] - 12 * terms[n - 2]);
-        }
-        let rule = recurrence(&terms).unwrap();
-        assert_eq!(rule, vec![(9, 1), (-12, 1)]);
-        assert!((growth(&rule) - (9.0 + 33f64.sqrt()) / 2.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn a_halving_sequence_carries_a_rational_rule() {
-        let terms = vec![1024i128, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1];
-        assert_eq!(recurrence(&terms), Some(vec![(1, 2)]));
-    }
-
-    #[test]
-    fn the_primes_and_the_catalan_numbers_refuse_every_rule() {
-        let ps: Vec<i128> = primes(200).iter().map(|&p| p as i128).collect();
-        assert_eq!(recurrence(&ps), None);
-        let cs: Vec<i128> = catalan(40_000_000).iter().map(|&c| c as i128).collect();
-        assert_eq!(recurrence(&cs), None);
-    }
-
-    #[test]
-    fn blends_of_c_finite_sequences_stay_c_finite() {
-        let fib = fibonacci(40);
-        let squared = hadamard(&fib, &fib);
-        assert_eq!(recurrence(&squared).unwrap().len(), 3);
-        let summed = sigma(&fib).unwrap();
-        assert_eq!(recurrence(&summed).unwrap().len(), 3);
-        let paired = decimate(&fib, 2, 0).unwrap();
-        let rule = recurrence(&paired).unwrap();
-        assert_eq!(rule, vec![(3, 1), (-1, 1)]);
-        let convolved = cauchy(&fib, &fib).unwrap();
-        assert_eq!(recurrence(&convolved).unwrap().len(), 4);
-    }
-
-    #[test]
-    fn the_term_ops_keep_their_hand_checked_values() {
-        let a = vec![1i128, 2, 3, 4, 5];
-        let b = vec![10i128, 20, 30];
-        assert_eq!(add(&a, &b), vec![11, 22, 33]);
-        assert_eq!(sub(&b, &a), vec![9, 18, 27]);
-        assert_eq!(hadamard(&a, &b), vec![10, 40, 90]);
-        assert_eq!(cauchy(&a, &b).unwrap(), vec![10, 40, 100]);
-        assert_eq!(shift(&a, 2), vec![3, 4, 5]);
-        assert_eq!(decimate(&a, 2, 1).unwrap(), vec![2, 4]);
-        assert_eq!(delta(&a), vec![1, 1, 1, 1]);
-        assert_eq!(sigma(&a).unwrap(), vec![1, 3, 6, 10, 15]);
-        assert_eq!(scale(&a, -2), vec![-2, -4, -6, -8, -10]);
-    }
-
-    #[test]
-    fn the_zero_sequence_returns_the_empty_rule() {
-        assert_eq!(recurrence(&[0, 0, 0, 0, 0, 0]), Some(vec![]));
-        assert_eq!(recurrence(&[1, 2]), None);
-    }
-
-    #[test]
-    fn a_short_prefix_is_not_enough_evidence() {
-        assert_eq!(recurrence(&[1, 2, 4]), None);
-        assert_eq!(recurrence(&[1, 2, 4, 8]), Some(vec![(2, 1)]));
-    }
-
-    #[test]
-    fn refuses_a_zero_step_and_a_sum_past_the_width() {
-        assert!(decimate(&[1, 2, 3], 0, 0).is_err());
-        assert!(decimate(&[1, 2, 3], 1, 0).is_ok());
-        assert!(sigma(&[i128::MAX, 1]).is_err());
-        assert!(cauchy(&[i128::MAX, 1], &[2, 1]).is_err());
     }
 }

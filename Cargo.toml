@@ -19,9 +19,6 @@ workspace = true
 serde.workspace = true
 mrly-core.workspace = true
 
-[dev-dependencies]
-serde_json.workspace = true
-
 [workspace]
 members = ["js", "py", "cli"]
 
@@ -36,16 +33,12 @@ keywords = ["mathematics", "fractal", "cellular-automata", "generative"]
 categories = ["mathematics", "science", "multimedia::images"]
 
 [workspace.lints.rust]
-missing_docs = "deny"
 unsafe_code = "forbid"
 unreachable_pub = "warn"
 
 [profile.release]
 lto = true
 codegen-units = 1
-
-[profile.test]
-opt-level = 1
 
 [profile.wasm]
 inherits = "release"

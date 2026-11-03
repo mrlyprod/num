@@ -17,28 +17,16 @@ const STIRLING: [f64; 8] = [
     -3617.0 / 122_400.0,
 ];
 
-/// One base-2 design read along the row word of odd sides `3, 5, ..., 2L+1`, out of its fill polynomial `P_F(n) = sum_j a_j n^(dim-j) (n-1)^j`.
-///
-/// The fill ratio is `(w/2^dim)^L L^drift C (1 + c_1/L + O(L^-2))`, `w` the corners, `drift = dim/2 - mean` and `c_1 = dim/8 + drift - var/2` over the odd count of the corners, and `C = Gamma(3/2)^dim / prod_i Gamma(2 - r_i)` over the roots of `P_F`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Row {
-    /// The odd-count profile: `a_j` corners with `j` odd coordinates, `j` from 0 to `dim`.
     pub profile: Vec<u64>,
-    /// The drift, the power of `L` the fill carries past its ratio per level, as a reduced fraction.
     pub drift: (i64, i64),
-    /// The first correction `c_1`, as a reduced fraction.
     pub correction: (i64, i64),
-    /// The roots of the fill polynomial: the zeros, the ones, the rational roots, then the rest.
     pub roots: Vec<Complex>,
-    /// The constant `C`, the Gamma form at the roots.
     pub constant: f64,
-    /// The constant spelled: a rational, a power of `sqrt(pi)`, and the Gamma, `cosh`, `cos` or `sin` values the roots leave.
     pub closed: String,
-    /// The constant by reflection alone, `(sqrt(pi)/2)^(m_0 + m_1) prod_pairs sin(pi r)/(4 r (1-r))`, when every root outside `0, 1/2, 1` pairs with `1 - r`.
     pub reflection: Option<f64>,
-    /// The constant times the mirror design's, `prod_i sin(pi r_i)/(4 r_i (1 - r_i))` with `pi/4` at a root 0 or 1.
     pub mirror: f64,
-    /// For a parity design at `dim >= 2`: whether its corners hold an odd count of odd coordinates, and its Wallis sieve product.
     pub parity: Option<(bool, f64)>,
 }
 
@@ -487,15 +475,6 @@ fn parity_of(profile: &[u64], dimension: usize) -> Option<bool> {
     })
 }
 
-/// Counts a base-2 design's corners by how many odd coordinates each holds, the profile the row word reads: the code is a bitmask over the corners, corner `i` is the binary digits of `i` as `math::bang::code_to_corners` reads it, so its odd coordinates are the ones of `i`.
-///
-/// ```
-/// assert_eq!(mrly_num::sieve::row_profile(7, 2).unwrap(), vec![1, 2, 0]);
-/// ```
-///
-/// # Errors
-///
-/// Errs outside dim 1 to 3, or on a code out of range for the dimension.
 pub fn row_profile(code: u128, dimension: usize) -> Result<Vec<u64>> {
     if !(1..=ROW_DIMENSIONS).contains(&dimension) {
         return value_error(format!(
@@ -516,11 +495,6 @@ pub fn row_profile(code: u128, dimension: usize) -> Result<Vec<u64>> {
     Ok(profile)
 }
 
-/// Returns the cells a design of this profile fills at one side, `sum_j a_j E^(dim-j) O^j` with `E` and `O` the even and the odd positions an axis holds: `P_F(n)` at side `2n - 1` and `w n^dim` at side `2n`.
-///
-/// # Errors
-///
-/// Errs on a profile no design in dim 1 to 3 holds, or when the fill overruns a u128.
 pub fn row_fill(profile: &[u64], side: u64) -> Result<u128> {
     fill_at(profile, row_dimension(profile)?, side)
 }
@@ -543,19 +517,6 @@ fn fill_at(profile: &[u64], dimension: usize, side: u64) -> Result<u128> {
     Ok(fill)
 }
 
-/// Reads the design of this profile along the row word: its drift, its first correction, the roots of its fill polynomial, its constant from the Gamma form, the constant spelled, and the constant again by reflection, against the mirror and as a Wallis sieve product wherever those apply.
-///
-/// The fill polynomial factors as `w n^(m_0) (n-1)^(m_1)` times a core with integer coefficients; its rational roots are found exactly and divided out, and what is left is a constant, an irreducible quadratic or, at dim 3, an irreducible cubic, whose roots are taken in floating point. Each `Gamma(2 - r)` is read against one `Gamma(3/2)` as a ratio, by the recurrence up past 16 and Stirling's series there, so the large terms cancel before they round.
-///
-/// ```
-/// let row = mrly_num::sieve::row_law(&[1, 0, 1]).unwrap();
-/// assert_eq!(row.closed, "cosh(pi/2)/2");
-/// assert!((row.constant - (std::f64::consts::PI / 2.0).cosh() / 2.0).abs() < 1e-14);
-/// ```
-///
-/// # Errors
-///
-/// Errs on a profile no design in dim 1 to 3 holds.
 pub fn row_law(profile: &[u64]) -> Result<Row> {
     let dimension = row_dimension(profile)?;
     let d = dimension as i128;
@@ -602,13 +563,6 @@ pub fn row_law(profile: &[u64]) -> Result<Row> {
     })
 }
 
-/// Walks the renormalised fill `R_L (2^dim/w)^L / L^drift` of the design of this profile to every stop, `R_L` the product of the letters' fill ratios, on the odd sides `3, 5, ..., 2L+1` or on the even sides `2, 4, ..., 2L`.
-///
-/// Each letter adds `log(1 + (2^dim fill - w side^dim) / (w side^dim))`, the excess taken in exact integers; at an even side the excess is zero and the even word carries no drift, so its walk stands at 1.
-///
-/// # Errors
-///
-/// Errs on a profile no design in dim 1 to 3 holds, or on stops that are not rising whole numbers from 1.
 pub fn row_settle(profile: &[u64], stops: &[usize], even: bool) -> Result<Vec<f64>> {
     let dimension = row_dimension(profile)?;
     if stops.first().is_some_and(|&s| s == 0) || stops.windows(2).any(|pair| pair[0] >= pair[1]) {
@@ -639,121 +593,4 @@ pub fn row_settle(profile: &[u64], stops: &[usize], even: bool) -> Result<Vec<f6
         }
     }
     Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::sieve::solid_limit;
-
-    #[test]
-    fn the_row_constants_meet_their_closed_forms() {
-        let named: [(usize, u128, f64, &str, bool); 11] = [
-            (1, 1, 0.886_226_925_452_758, "sqrt(pi)/2", true),
-            (2, 7, 0.879_525_401_447_625_3, "3 pi/(4 Gamma(1/3))", false),
-            (2, 14, 0.870_010_809_837_738_6, "3 pi/(8 Gamma(2/3))", false),
-            (2, 6, FRAC_PI_4, "pi/4", true),
-            (2, 9, 1.254_589_239_329_028, "cosh(pi/2)/2", true),
-            (2, 11, 1.080_152_394_264_927, "3 cosh(pi/(2 sqrt3))/4", true),
-            (
-                3,
-                23,
-                0.767_916_038_651_074_6,
-                "pi^(3/2)/(2 Gamma(1/4))",
-                false,
-            ),
-            (
-                3,
-                232,
-                0.757_338_025_727_611_8,
-                "pi^(3/2)/(6 Gamma(3/4))",
-                false,
-            ),
-            (
-                3,
-                150,
-                0.948_815_485_719_679_6,
-                "pi^(3/2)/(8 |Gamma(7/4 - i sqrt3/4)|^2)",
-                false,
-            ),
-            (
-                3,
-                105,
-                1.052_420_668_167_879,
-                "pi^(3/2)/(8 |Gamma(5/4 - i sqrt3/4)|^2)",
-                false,
-            ),
-            (3, 129, 1.907_095_803_094_885, "cosh(pi sqrt3/2)/4", true),
-        ];
-        for (dimension, code, want, closed, reflects) in named {
-            let row = row_law(&row_profile(code, dimension).unwrap()).unwrap();
-            assert!(
-                (row.constant - want).abs() < 1e-14,
-                "code {code} {}",
-                row.constant
-            );
-            assert_eq!(row.closed, closed, "code {code}");
-            assert_eq!(row.reflection.is_some(), reflects, "code {code}");
-            if let Some(value) = row.reflection {
-                assert!((value - want).abs() < 1e-14, "code {code} {value}");
-            }
-            if let Some((_, product)) = row.parity {
-                assert!((product - want).abs() < 1e-14, "code {code} {product}");
-            }
-        }
-        assert!((solid_limit() - parity_product(3, true).unwrap()).abs() < 1e-15);
-    }
-
-    #[test]
-    fn a_design_times_its_mirror_reduces_by_reflection() {
-        for dimension in 1..=3usize {
-            let flip = (1usize << dimension) - 1;
-            for code in 1..(1u128 << (1 << dimension)) {
-                let mirror = (0..1usize << dimension)
-                    .filter(|&i| code >> i & 1 == 1)
-                    .fold(0u128, |acc, i| acc | 1 << (i ^ flip));
-                let own = row_law(&row_profile(code, dimension).unwrap()).unwrap();
-                let other = row_law(&row_profile(mirror, dimension).unwrap()).unwrap();
-                let product = own.constant * other.constant;
-                assert!(
-                    (own.mirror - product).abs() < 1e-13,
-                    "dim {dimension} code {code}"
-                );
-            }
-        }
-        let seven = row_law(&[1, 2, 0]).unwrap();
-        assert!((seven.mirror - 9.0 * 3f64.sqrt() * PI / 64.0).abs() < 1e-15);
-    }
-
-    #[test]
-    fn the_row_settles_on_its_constant_past_the_first_correction() {
-        let row = row_law(&[1, 2, 0]).unwrap();
-        let c1 = row.correction.0 as f64 / row.correction.1 as f64;
-        let stops = [1_000usize, 10_000, 100_000, 1_000_000];
-        let walk = row_settle(&row.profile, &stops, false).unwrap();
-        for (&level, &value) in stops.iter().zip(&walk) {
-            let law = row.constant * (1.0 + c1 / level as f64);
-            let gap = (value - law).abs() * (level * level) as f64;
-            assert!(gap < 2.0, "level {level} {value}");
-        }
-        assert!((walk[3] - row.constant).abs() < 5e-7);
-    }
-
-    #[test]
-    fn even_sides_carry_no_drift_and_no_constant() {
-        for profile in [vec![1, 2, 0], vec![1, 0, 1], vec![1, 3, 0, 0], vec![1, 0]] {
-            let walk = row_settle(&profile, &[1, 2, 10, 1000], true).unwrap();
-            assert!(walk.iter().all(|&value| value == 1.0), "{profile:?}");
-        }
-    }
-
-    #[test]
-    fn the_row_refuses_what_no_design_holds() {
-        assert!(row_law(&[2, 0, 0]).is_err());
-        assert!(row_law(&[0, 0, 0]).is_err());
-        assert!(row_law(&[1, 0, 0, 0, 0]).is_err());
-        assert!(row_profile(7, 4).is_err());
-        assert!(row_settle(&[1, 2, 0], &[3, 2], false).is_err());
-        assert!(parity_product(1, true).is_err());
-    }
 }

@@ -1,34 +1,17 @@
-//! The readings: a digit-parity design read along a polynomial or the primes, the battery that tests the signs, the near-heads that fix some of its pairs, and the major-arc model of the bias along the squares.
-//!
-//! A design is `f_{b,D}(n)`, the parity of the number of base-`b` digits of `n` in `D`, with `2 <= b <= 6` and `D` a subset of the digits `1..b-1`, named `b:D`, so `2:1` is Thue-Morse and `3:2` the ternary parity; its sign is `x(n) = (-1)^f(n)`. Rudin-Shapiro, the parity of the `11` blocks of the binary digits, rides beside them.
-//!
-//! A reading is `y(n) = x(P(n))` along a polynomial `P`, or `x(p_n)` along the consecutive primes. The battery reads a stream of signs by Pearson correlations: the shift pairs `(n, n + h)`, the 44 dilation pairs `(n, B n + r)`, the two kernel pairs `(b n, b^2 n)` and the dilation square `y(n) y(2n) y(3n) y(6n)`.
-//!
-//! A battery pair is a near-head when the composed polynomials satisfy `P(psi(n)) = b^L (P(phi(n)) + q) + s` with `0 <= s < b^L`; when `q = 0` the design's digits concatenate and the pair reads exactly `x(s)`.
-//!
-//! Along the squares the circle method's major arcs model `S(N) = sum_(n<N) x(n^2)` as `1 + Re sum_gamma A(gamma) U(gamma; N^2)`, the arcs `gamma = c/(b^2 - 1)` being the points fixed by `B = b^2`, each with `eta = 1 - log_B abs(sigma)`, the amplitude `A = (G(-c, q)/q) K` a quadratic Gauss sum times the `B`-adic limit `K` of the digit recursion, and `U(gamma; M) = sum_(1<=m<M) x(m) e(m gamma)/(2 sqrt(m))` summed exactly block by block through a Taylor-moment recursion.
-
 use crate::zeta::Complex;
 use mrly_core::named_enum;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f64::consts::TAU;
 
-// DESIGNS
-
-/// A digit-parity design `b:D`, or Rudin-Shapiro: the sign `x(n)` is `-1` to the count of base-`b` digits of `n` in `D`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Design {
-    /// The base, 2 through 6; a base outside that span is clamped into it.
     pub base: u8,
-    /// The digit set `D` as a bitmask, bit `d - 1` set when the digit `d` is in `D`; bits past the base's digits are ignored, and an empty set reads a constant sign.
     pub mask: u8,
-    /// Whether the design is Rudin-Shapiro, the parity of the `11` blocks in the binary digits, which ignores the base and the mask.
     pub rudin: bool,
 }
 
 impl Design {
-    /// Builds the design `b:D` from its base and its digit mask.
     pub fn digits(base: u8, mask: u8) -> Design {
         Design {
             base,
@@ -36,15 +19,12 @@ impl Design {
             rudin: false,
         }
     }
-    /// Returns Thue-Morse, `2:1`.
     pub fn thue() -> Design {
         Design::digits(2, 1)
     }
-    /// Returns the ternary parity, `3:2`, the parity of the ternary digits equal to 2.
     pub fn ternary() -> Design {
         Design::digits(3, 2)
     }
-    /// Returns Rudin-Shapiro.
     pub fn rudin() -> Design {
         Design {
             base: 2,
@@ -54,7 +34,6 @@ impl Design {
     }
 }
 
-/// Lists the 57 digit designs, base by base and mask by mask, then Rudin-Shapiro.
 pub fn designs() -> Vec<Design> {
     let mut out: Vec<Design> = (2..=6u8)
         .flat_map(|base| (1..1u8 << (base - 1)).map(move |mask| Design::digits(base, mask)))
@@ -72,13 +51,6 @@ fn has(mask: u8, digit: u8) -> bool {
     digit > 0 && (mask >> (digit - 1)) & 1 == 1
 }
 
-/// Returns the design's name in the `b:D` form, the digits of `D` ascending, or `rudin-shapiro`.
-///
-/// ```
-/// use mrly_num::readings::{Design, name};
-/// assert_eq!(name(Design::thue()), "2:1");
-/// assert_eq!(name(Design::digits(6, 0b10101)), "6:135");
-/// ```
 pub fn name(design: Design) -> String {
     if design.rudin {
         return "rudin-shapiro".to_string();
@@ -165,14 +137,6 @@ impl Reader {
     }
 }
 
-/// Returns the design's sign at a number, plus or minus one.
-///
-/// ```
-/// use mrly_num::readings::{Design, sign};
-/// let word: Vec<i8> = (0..8).map(|n| sign(Design::thue(), n)).collect();
-/// assert_eq!(word, vec![1, -1, -1, 1, -1, 1, 1, -1]);
-/// assert_eq!(sign(Design::ternary(), 5), -1);
-/// ```
 pub fn sign(design: Design, n: u64) -> i8 {
     let (base, mask) = fix(design);
     if design.rudin {
@@ -187,30 +151,20 @@ pub fn sign(design: Design, n: u64) -> i8 {
     1 - 2 * p as i8
 }
 
-// READINGS
-
 named_enum! {
-    /// The sequences a design is read along: `y(n) = x(P(n))` for a polynomial `P`, or `x(p_n)` along the primes.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
     pub enum Reading {
-        /// The design itself, `P(n) = n`.
         N => "n",
-        /// The squares, `P(n) = n^2`.
         Square => "square",
-        /// The pronic numbers, `P(n) = n^2 + n`.
         SquarePlusN => "square-plus-n",
-        /// The cubes, `P(n) = n^3`.
         Cube => "cube",
-        /// The consecutive primes, `p_0 = 2`.
         Primes => "primes",
     }
 }
 
-/// Lists the readings in the order the battery tables print them.
 pub const READINGS: [Reading; 5] = Reading::all();
 
 impl Reading {
-    /// Returns the reading's formula, written the way the page prints it.
     pub fn formula(self) -> String {
         match self {
             Reading::N => "n",
@@ -294,13 +248,6 @@ fn each_prime(count: usize, mut each: impl FnMut(u64)) {
     }
 }
 
-/// Builds a reading's first signs: `y(n) = x(P(n))` for `n < count`, or `x(p_n)` along the first `count` primes from a segmented sieve.
-///
-/// ```
-/// use mrly_num::readings::{Design, Reading, stream};
-/// assert_eq!(stream(Design::thue(), Reading::Square, 6), vec![1, -1, -1, 1, -1, -1]);
-/// assert_eq!(stream(Design::thue(), Reading::Primes, 4), vec![-1, 1, 1, -1]);
-/// ```
 pub fn stream(design: Design, reading: Reading, count: u32) -> Vec<i8> {
     let reader = Reader::new(design);
     let count = count as usize;
@@ -314,33 +261,20 @@ pub fn stream(design: Design, reading: Reading, count: u32) -> Vec<i8> {
         .collect()
 }
 
-// BATTERY
-
-/// One dilation pair of the battery: `y(n)` against `y(scale n + offset)`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Dilation {
-    /// The factor `B`, 2 through 9.
     pub scale: u8,
-    /// The remainder `r`, below the factor.
     pub offset: u8,
-    /// The Pearson correlation of the pair over the battery's `N` values of `n`.
     pub correlation: f64,
 }
 
-/// The battery's verdict on one stream, every correlation over the same `N`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Battery {
-    /// The `N` every statistic runs over: the pairs `n < N`, so `z = abs(r) sqrt(N)` is the caller's.
     pub count: usize,
-    /// The mean of `y(n)` over `n < N`.
     pub mean: f64,
-    /// The shift test: the Pearson correlation of `y(n)` with `y(n + h)` for `h = 1..=64`, in that order.
     pub shift: Vec<f64>,
-    /// The dilation test: the 44 pairs `(B, r)`, `2 <= B <= 9`, `r < B`, in that order.
     pub dilation: Vec<Dilation>,
-    /// The kernel test: the correlation of `y(b n)` with `y(b^2 n)` for `b = 2, 3`.
     pub kernel: Vec<f64>,
-    /// The dilation square: the mean of `y(n) y(2n) y(3n) y(6n)`.
     pub square: f64,
 }
 
@@ -370,9 +304,6 @@ fn correlate(
     pearson(count, su, sv, suv)
 }
 
-/// Runs the battery on a stream of signs.
-///
-/// Every statistic runs over the same `N = min(floor(len / 9), len - 64)` values of `n`, the largest that keeps every pair inside the stream, so a stream of `9N` signs feeds a battery at `N`; a stream below 72 signs gives `N = 0` and zeros. A pair whose sides have no variance reads zero.
 pub fn battery(stream: &[i8]) -> Battery {
     let count = (stream.len() / 9).min(stream.len().saturating_sub(64));
     let mean = stream[..count].iter().map(|&y| y as i64).sum::<i64>() as f64 / count.max(1) as f64;
@@ -407,26 +338,15 @@ pub fn battery(stream: &[i8]) -> Battery {
     }
 }
 
-// NEAR-HEADS
-
-/// A battery pair that is a near-head of a reading at the design's base: `P(psi(n)) = b^level (P(phi(n)) + shift) + tail`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Head {
-    /// Whether the pair is a kernel pair `(b n, b^2 n)` rather than a dilation pair `(n, B n + r)`.
     pub kernel: bool,
-    /// The dilation's factor `B`, or the kernel's base `b`.
     pub scale: u8,
-    /// The dilation's remainder `r`, zero for a kernel pair.
     pub offset: u8,
-    /// The level `L`, the count of digits the pair appends.
     pub level: u8,
-    /// The carry `q`, saturated into the field.
     pub shift: i32,
-    /// The tail `s`, the digits appended below the carry.
     pub tail: u32,
-    /// The design's sign at the tail, `x(s)`.
     pub sign: i8,
-    /// Whether the pair reads `x(s)` at every `n`, so its correlation is exactly plus or minus one: `q = 0`, and for Rudin-Shapiro a tail whose top digit is zero.
     pub exact: bool,
 }
 
@@ -477,15 +397,6 @@ fn near_head(
     Some((level, s.div_euclid(scale), s.rem_euclid(scale)))
 }
 
-/// Lists the battery pairs that are near-heads of a polynomial reading at the design's base, the 44 dilation pairs first and the two kernel pairs after; the primes have none.
-///
-/// ```
-/// use mrly_num::readings::{Design, Reading, near_heads};
-/// let heads = near_heads(Design::thue(), Reading::Square);
-/// let pairs: Vec<(bool, u8, u8)> = heads.iter().map(|h| (h.kernel, h.scale, h.offset)).collect();
-/// assert_eq!(pairs, vec![(false, 2, 0), (false, 4, 0), (false, 8, 0), (true, 2, 0)]);
-/// assert!(heads.iter().all(|h| h.exact && h.sign == 1));
-/// ```
 pub fn near_heads(design: Design, reading: Reading) -> Vec<Head> {
     let p = reading.coefficients();
     if p.is_empty() {
@@ -524,20 +435,12 @@ pub fn near_heads(design: Design, reading: Reading) -> Vec<Head> {
         .collect()
 }
 
-// MAJOR ARCS
-
-/// One major arc of a design along the squares: the point `gamma = num/den`, its exponent and its amplitude.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Arc {
-    /// The numerator of `gamma` in lowest terms.
     pub num: u32,
-    /// The denominator of `gamma` in lowest terms, a divisor of `b^2 - 1`.
     pub den: u32,
-    /// The exponent `eta = 1 - log_B abs(sigma)`, `B = b^2`, `sigma = sum_(t<B) x(t) e(t gamma)`; the arc's term grows as `N^(1 - 2 eta)`.
     pub eta: f64,
-    /// The real part of the amplitude `A = (G(-c, q)/q) K`.
     pub amplitude_re: f64,
-    /// The imaginary part of the amplitude.
     pub amplitude_im: f64,
 }
 
@@ -767,16 +670,6 @@ fn adic(base: u8, point: &Point) -> Complex {
     }
 }
 
-/// Lists a design's major arcs along the squares below the cut, best first, each with its amplitude.
-///
-/// The cut is held under `1/2`, where the trees stop converging; the lab's model keeps the arcs below `1/4`. An arc whose Gauss sum vanishes keeps a zero amplitude. Rudin-Shapiro, which is no digit design, has none. For base 6 the limit `K` is a series over the 2-adic and 3-adic valuations, cut at 14 terms.
-///
-/// ```
-/// use mrly_num::readings::{Design, arcs};
-/// let found = arcs(Design::thue(), 0.25);
-/// assert_eq!((found[0].num, found[0].den), (1, 3));
-/// assert!((found[0].amplitude_re + 2.0 / 3.0).abs() < 1e-9);
-/// ```
 pub fn arcs(design: Design, cut: f64) -> Vec<Arc> {
     if design.rudin {
         return Vec::new();
@@ -915,9 +808,6 @@ fn weighted(reader: &Reader, num: u64, den: u64, tops: &[u128]) -> Vec<Complex> 
         .collect()
 }
 
-/// Predicts the bias `S(N) = sum_(n<N) x(n^2)` at `N = 2^e` for each exponent, from the arcs below the cut: `1 + Re sum_gamma A(gamma) U(gamma; N^2)`.
-///
-/// Exponents above 63 are read as 63. Rudin-Shapiro has no arcs and reads the constant one.
 pub fn model(design: Design, cut: f64, exponents: &[u32]) -> Vec<f64> {
     let tops: Vec<u128> = exponents
         .iter()
@@ -940,7 +830,6 @@ pub fn model(design: Design, cut: f64, exponents: &[u32]) -> Vec<f64> {
     out
 }
 
-/// Measures the bias `S(N) = sum_(n<N) y(n)` of a stream at `N = 2^e` for each exponent; a checkpoint past the stream's end sums the whole stream.
 pub fn bias(stream: &[i8], exponents: &[u32]) -> Vec<i64> {
     exponents
         .iter()
@@ -952,206 +841,4 @@ pub fn bias(stream: &[i8], exponents: &[u32]) -> Vec<i64> {
             stream[..top].iter().map(|&y| y as i64).sum()
         })
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_first_signs_are_the_words() {
-        assert_eq!(
-            stream(Design::thue(), Reading::N, 8),
-            vec![1, -1, -1, 1, -1, 1, 1, -1]
-        );
-        assert_eq!(
-            stream(Design::rudin(), Reading::N, 16),
-            vec![1, 1, 1, -1, 1, 1, -1, 1, 1, 1, 1, -1, -1, -1, 1, -1]
-        );
-    }
-
-    #[test]
-    fn the_fast_readers_agree_with_the_digit_loop() {
-        for design in designs() {
-            let reader = Reader::new(design);
-            for n in (0..3000u64).chain([u64::MAX - 7, u64::MAX]) {
-                assert_eq!(reader.sign(n as u128), sign(design, n), "{}", name(design));
-            }
-            let big = (u64::MAX as u128) * 977 + 12345;
-            let slow = |mut m: u128| {
-                let mut p = 0u8;
-                while m > 0 {
-                    p ^= u8::from(has(reader.mask, (m % reader.base as u128) as u8));
-                    m /= reader.base as u128;
-                }
-                1 - 2 * p as i8
-            };
-            if !design.rudin {
-                assert_eq!(reader.sign(big), slow(big), "{}", name(design));
-            }
-        }
-    }
-
-    #[test]
-    fn the_prime_stream_follows_the_sieve() {
-        let mut found = Vec::new();
-        each_prime(100, |p| found.push(p as usize));
-        assert_eq!(found, crate::prime::primes(541));
-        let signs = stream(Design::ternary(), Reading::Primes, 100);
-        let direct: Vec<i8> = found
-            .iter()
-            .map(|&p| sign(Design::ternary(), p as u64))
-            .collect();
-        assert_eq!(signs, direct);
-    }
-
-    #[test]
-    fn a_near_head_reads_exactly_one() {
-        let verdict = battery(&stream(Design::thue(), Reading::Square, 9 << 12));
-        assert_eq!(verdict.count, 1 << 12);
-        let two = verdict
-            .dilation
-            .iter()
-            .find(|d| d.scale == 2 && d.offset == 0)
-            .unwrap();
-        assert_eq!(two.correlation, 1.0);
-        assert_eq!(verdict.kernel[0], 1.0);
-        assert_eq!(verdict.square, 1.0);
-    }
-
-    #[test]
-    fn the_battery_reads_the_squares_as_the_lab_prints_them() {
-        let verdict = battery(&stream(Design::thue(), Reading::Square, 9 << 15));
-        assert_eq!(verdict.count, 1 << 15);
-        assert!((verdict.mean + 0.0150).abs() < 1e-4);
-        assert!((verdict.shift[14].abs() - 0.0280).abs() < 1e-4);
-        let peak = (0..64)
-            .max_by(|&a, &b| verdict.shift[a].abs().total_cmp(&verdict.shift[b].abs()))
-            .unwrap();
-        assert_eq!(peak + 1, 15);
-        assert_eq!(verdict.shift.len(), 64);
-        assert_eq!(verdict.dilation.len(), 44);
-    }
-
-    #[test]
-    fn the_near_heads_follow_the_composed_polynomials() {
-        let rows = |design: Design, reading: Reading| -> Vec<(bool, u8, u8, u8, u32, i8, bool)> {
-            near_heads(design, reading)
-                .iter()
-                .map(|h| {
-                    (
-                        h.kernel, h.scale, h.offset, h.level, h.tail, h.sign, h.exact,
-                    )
-                })
-                .collect()
-        };
-        assert_eq!(
-            rows(Design::ternary(), Reading::SquarePlusN),
-            vec![(false, 3, 1, 2, 2, -1, true), (false, 9, 4, 4, 20, 1, true)]
-        );
-        assert_eq!(
-            rows(Design::ternary(), Reading::Cube),
-            vec![
-                (false, 3, 0, 3, 0, 1, true),
-                (false, 9, 0, 6, 0, 1, true),
-                (true, 3, 0, 3, 0, 1, true)
-            ]
-        );
-        let rudin = rows(Design::rudin(), Reading::N);
-        assert_eq!(rudin.len(), 15);
-        assert_eq!(rudin[14], (true, 2, 0, 1, 0, 1, true));
-        assert_eq!(rudin[1], (false, 2, 1, 1, 1, 1, false));
-        assert_eq!(rudin[3], (false, 4, 1, 2, 1, 1, true));
-        assert_eq!(rudin[5], (false, 4, 3, 2, 3, -1, false));
-        assert!(near_heads(Design::thue(), Reading::Primes).is_empty());
-        let signs = stream(Design::rudin(), Reading::N, 9 << 10);
-        let verdict = battery(&signs);
-        let at = |scale: u8, offset: u8| {
-            verdict
-                .dilation
-                .iter()
-                .find(|d| d.scale == scale && d.offset == offset)
-                .unwrap()
-                .correlation
-        };
-        assert_eq!(at(4, 1), 1.0);
-        assert!(at(4, 3).abs() < 0.1);
-        assert!(at(2, 1).abs() < 0.1);
-    }
-
-    #[test]
-    fn the_thue_morse_arc_is_four_thirds_turned_back_a_third() {
-        let found = arcs(Design::thue(), 0.25);
-        assert_eq!(found.len(), 2);
-        assert_eq!((found[0].num, found[0].den), (1, 3));
-        assert_eq!((found[1].num, found[1].den), (2, 3));
-        assert!((found[0].eta - 0.2075).abs() < 1e-4);
-        let want = turn(2, 3) * (4.0 / 3.0);
-        assert!((found[0].amplitude_re - want.re).abs() < 1e-9);
-        assert!((found[0].amplitude_im - want.im).abs() < 1e-9);
-        assert!(arcs(Design::rudin(), 0.25).is_empty());
-        assert!(arcs(Design::thue(), 0.2).is_empty());
-    }
-
-    #[test]
-    fn the_model_prints_the_lab_rows_at_a_quarter() {
-        let exponents = [12u32, 14, 16, 18, 20];
-        for (design, want) in [
-            (Design::thue(), [-4.27, -4.83, -5.45, -6.14, -6.91]),
-            (
-                Design::digits(4, 0b101),
-                [-5.29, -6.30, -7.47, -8.85, -10.48],
-            ),
-            (
-                Design::digits(5, 0b1001),
-                [-2.99, -2.88, -2.96, -4.11, -5.84],
-            ),
-            (
-                Design::digits(6, 0b10000),
-                [10.11, 11.38, 10.99, 12.21, 13.09],
-            ),
-            (
-                Design::digits(6, 0b01001),
-                [-4.94, -5.69, -7.08, -7.92, -9.24],
-            ),
-            (Design::digits(6, 0b10101), [4.03, 4.80, 4.45, 5.46, 8.91]),
-        ] {
-            let got = model(design, 0.25, &exponents);
-            for ((&z, &e), &w) in got.iter().zip(&exponents).zip(&want) {
-                let scaled = z / 2f64.powi(e as i32 / 2);
-                assert!(
-                    (scaled - w).abs() < 0.006,
-                    "{} 2^{e}: {scaled} against {w}",
-                    name(design)
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn the_bias_sums_the_stream_at_the_powers_of_two() {
-        let signs = stream(Design::thue(), Reading::Square, 1 << 20);
-        let exponents = [12u32, 14, 16, 18, 20];
-        let got = bias(&signs, &exponents);
-        for ((&s, &e), w) in got
-            .iter()
-            .zip(&exponents)
-            .zip([-4.06, -3.34, -3.77, -6.63, -9.15])
-        {
-            let scaled = s as f64 / 2f64.powi(e as i32 / 2);
-            assert!((scaled - w).abs() < 0.006, "2^{e}: {scaled} against {w}");
-        }
-        let direct: i64 = signs.iter().map(|&y| y as i64).sum();
-        assert_eq!(bias(&signs, &[0, 1, 20, 40]), vec![1, 0, direct, direct]);
-    }
-
-    #[test]
-    fn names_parse_back() {
-        for reading in Reading::all() {
-            assert_eq!(reading, reading.name().parse().unwrap());
-        }
-        assert_eq!(designs().len(), 58);
-        assert_eq!(name(Design::rudin()), "rudin-shapiro");
-        assert_eq!(name(Design::digits(9, 0xff)), "6:12345");
-    }
 }

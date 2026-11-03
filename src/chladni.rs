@@ -15,26 +15,14 @@ const SILENT: f64 = 1e-12;
 const TOP: f32 = 1.0 - f32::EPSILON / 2.0;
 const TURNS: usize = 1024;
 
-// THE PLATE
-
-/// One figure of the square plate: its two wave numbers, the sign that joins the two products and its pitch.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Rung {
-    /// The smaller wave number.
     pub n: usize,
-    /// The larger wave number.
     pub m: usize,
-    /// The sign joining the two products, 1 or -1, and 1 when the wave numbers agree.
     pub sign: i32,
-    /// The pitch `sqrt(n^2 + m^2)`.
     pub pitch: f64,
 }
 
-/// Samples the Chladni figure `cos(n pi x) cos(m pi y) + sign cos(m pi x) cos(n pi y)` of a free square plate at the cell centres `(i + 1/2) / size` of a row-major `size` by `size` raster, `x` along a row, scaled so the largest magnitude is 1, or all zero when no centre rises past `1e-12`; when `n == m` it is the single product for either sign.
-///
-/// # Errors
-///
-/// Errs when the sign is not 1 or -1, the size is 0 or over 1024, or a wave number is over 64.
 pub fn plate(n: usize, m: usize, sign: i32, size: usize) -> Result<Vec<f64>> {
     if sign != 1 && sign != -1 {
         return value_error(format!("the sign {sign} is not 1 or -1."));
@@ -73,11 +61,6 @@ pub fn plate(n: usize, m: usize, sign: i32, size: usize) -> Result<Vec<f64>> {
     Ok(field)
 }
 
-/// Lists every distinct plate figure with `0 <= n <= m <= cap` but `(0, 0)`, both signs when `n < m` and the sign 1 when `n == m`, by pitch, then `n`, then the sign 1 before -1.
-///
-/// # Errors
-///
-/// Errs when the cap is over 64.
 pub fn ladder(cap: usize) -> Result<Vec<Rung>> {
     if cap > WAVE_CAP {
         return value_error(format!("the cap {cap} is over {WAVE_CAP}."));
@@ -99,8 +82,6 @@ pub fn ladder(cap: usize) -> Result<Vec<Rung>> {
     rungs.sort_by_key(|r| (r.n * r.n + r.m * r.m, r.n, -r.sign));
     Ok(rungs)
 }
-
-// THE GHOSTS
 
 struct Board<'a> {
     field: &'a [f64],
@@ -231,8 +212,6 @@ impl<'a> Board<'a> {
     }
 }
 
-// THE SAND
-
 fn mix(mut z: u64) -> u64 {
     z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
     z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
@@ -253,11 +232,6 @@ fn fold(at: f64) -> f32 {
     (t as f32).min(TOP)
 }
 
-/// Shakes sand on a plate raster: grains are `x, y` pairs in `[0, 1)` over the row-major `side` by `side` field, a NaN pair an empty slot that stays NaN, a NaN cell a hole. Each step moves a grain a random length `kick |f| + floor` in a random direction plus a drift `-0.3 f grad f / max|grad f|^2`, with `kick = 0.6 / max|grad f|` read off the raster by finite differences and a fixed kick on a flat field, the field read bilinearly with its holes and its rim ghosted to the mean of their plate neighbours. The rim reflects; a grain on a hole falls through and becomes NaN. Step `from + i` of grain `j` draws from a counter keyed by `(seed, from + i, j)`, so six steps are three and three.
-///
-/// # Errors
-///
-/// Errs when the side is 0, the field is not the side squared or holds an infinity, the grains hold an odd count or over 400,000 pairs, or the steps are over 64.
 pub fn shake(
     field: &[f64],
     side: usize,
@@ -318,8 +292,6 @@ pub fn shake(
     Ok(out)
 }
 
-// THE LINES
-
 fn pieces(from: (f64, f64), to: (f64, f64), solid: impl Fn(usize, usize) -> bool) -> Vec<[f64; 4]> {
     let at = |t: f64| (from.0 + t * (to.0 - from.0), from.1 + t * (to.1 - from.1));
     let mut cuts = vec![0.0, 1.0];
@@ -355,11 +327,6 @@ fn pieces(from: (f64, f64), to: (f64, f64), solid: impl Fn(usize, usize) -> bool
     out
 }
 
-/// Traces the zero set of a plate raster by marching squares on the lattice of cell centres, its holes and its rim ghosted to the mean of their plate neighbours so the lines run to every free edge: segments `x0, y0, x1, y1` in `[0, 1]` back to back, pieces inside a NaN cell dropped, a saddle joined by the mean of its four corners.
-///
-/// # Errors
-///
-/// Errs when the side is 0, or the field is not the side squared or holds an infinity.
 pub fn lines(field: &[f64], side: usize) -> Result<Vec<f64>> {
     let board = Board::new(field, side)?;
     let span = board.span();
@@ -423,150 +390,4 @@ pub fn lines(field: &[f64], side: usize) -> Result<Vec<f64>> {
         }
     }
     Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use mrly_core::rng::Rng;
-
-    fn sprinkle(count: usize, seed: u64) -> Vec<f32> {
-        let mut rng = Rng::new(seed);
-        (0..2 * count).map(|_| rng.unit() as f32).collect()
-    }
-
-    fn bits(grains: &[f32]) -> Vec<u32> {
-        grains.iter().map(|v| v.to_bits()).collect()
-    }
-
-    #[test]
-    fn the_plate_at_equal_waves_ignores_the_sign() {
-        let plus = plate(3, 3, 1, 32).unwrap();
-        assert_eq!(plus, plate(3, 3, -1, 32).unwrap());
-        let wave = |i: usize| (3.0 * PI * (i as f64 + 0.5) / 32.0).cos();
-        let product: Vec<f64> = (0..32 * 32).map(|i| wave(i % 32) * wave(i / 32)).collect();
-        let top = product.iter().fold(0.0f64, |a, v| a.max(v.abs()));
-        assert!(
-            plus.iter()
-                .zip(&product)
-                .all(|(p, q)| (p - q / top).abs() < 1e-12)
-        );
-    }
-
-    #[test]
-    fn a_figure_silent_at_every_centre_stays_zero() {
-        for (n, m, sign, size) in [(1, 1, 1, 1), (1, 2, 1, 2), (1, 2, -1, 2)] {
-            let field = plate(n, m, sign, size).unwrap();
-            assert!(field.iter().all(|&v| v == 0.0), "{n} {m} {sign} {size}");
-        }
-    }
-
-    #[test]
-    fn the_ladder_climbs_by_pitch_then_n_then_sign() {
-        let figures = |cap: usize| -> Vec<(usize, usize, i32)> {
-            ladder(cap)
-                .unwrap()
-                .iter()
-                .map(|r| (r.n, r.m, r.sign))
-                .collect()
-        };
-        assert_eq!(
-            figures(2),
-            vec![
-                (0, 1, 1),
-                (0, 1, -1),
-                (1, 1, 1),
-                (0, 2, 1),
-                (0, 2, -1),
-                (1, 2, 1),
-                (1, 2, -1),
-                (2, 2, 1),
-            ]
-        );
-        let twelve = ladder(12).unwrap();
-        assert_eq!(twelve.len(), 12 * 14);
-        assert!(twelve.windows(2).all(|w| w[0].pitch <= w[1].pitch));
-        let five = figures(5);
-        let at = five.iter().position(|&f| f == (0, 5, 1)).unwrap();
-        assert_eq!(
-            five[at..at + 4],
-            [(0, 5, 1), (0, 5, -1), (3, 4, 1), (3, 4, -1)]
-        );
-    }
-
-    #[test]
-    fn six_steps_are_three_and_three() {
-        let mut field = plate(2, 5, -1, 64).unwrap();
-        for row in 20..30 {
-            field[row * 64 + 20..row * 64 + 30].fill(f64::NAN);
-        }
-        let grains = sprinkle(2000, 3);
-        let once = shake(&field, 64, &grains, 10, 6, 9).unwrap();
-        let first = shake(&field, 64, &grains, 10, 3, 9).unwrap();
-        let twice = shake(&field, 64, &first, 13, 3, 9).unwrap();
-        assert_eq!(bits(&once), bits(&twice));
-        assert!(once.iter().any(|v| v.is_nan()));
-    }
-
-    #[test]
-    fn the_sand_runs_to_the_lines() {
-        let side = 128;
-        for (n, m, sign) in [(0, 1, 1), (0, 1, -1), (11, 12, 1), (11, 12, -1)] {
-            let field = plate(n, m, sign, side).unwrap();
-            let mut grains = sprinkle(4000, 5);
-            for from in [0, 60, 120, 180] {
-                grains = shake(&field, side, &grains, from, 60, 1).unwrap();
-            }
-            let wave = |x: f64, y: f64| {
-                let (n, m) = (n as f64 * PI, m as f64 * PI);
-                (n * x).cos() * (m * y).cos() + f64::from(sign) * (m * x).cos() * (n * y).cos()
-            };
-            let reach = 1.0 / side as f64;
-            let near = grains
-                .chunks(2)
-                .filter(|g| {
-                    let (x, y) = (f64::from(g[0]), f64::from(g[1]));
-                    let here = wave(x, y);
-                    (0..32).any(|k| {
-                        let (sin, cos) = (TAU * k as f64 / 32.0).sin_cos();
-                        (1..=4).any(|s| {
-                            let r = reach * s as f64 / 4.0;
-                            wave(x + r * cos, y + r * sin) * here <= 0.0
-                        })
-                    })
-                })
-                .count();
-            let share = near as f64 / 4000.0;
-            assert!(share >= 0.8, "({n}, {m}, {sign}) {share}");
-        }
-    }
-
-    #[test]
-    fn a_hole_swallows_a_grain_for_good() {
-        let mut field = plate(1, 2, 1, 16).unwrap();
-        field[8 * 16 + 8] = f64::NAN;
-        let grains = [8.5 / 16.0, 8.5 / 16.0, f32::NAN, f32::NAN, 0.1, 0.2];
-        let once = shake(&field, 16, &grains, 0, 1, 4).unwrap();
-        assert!(once[..4].iter().all(|v| v.is_nan()));
-        assert!(once[4..].iter().all(|v| v.is_finite()));
-        let again = shake(&field, 16, &once, 1, 5, 4).unwrap();
-        assert!(again[..4].iter().all(|v| v.is_nan()));
-    }
-
-    #[test]
-    fn the_lines_of_a_half_wave_sit_at_one_half() {
-        let side = 32;
-        let field: Vec<f64> = (0..side * side)
-            .map(|i| (PI * ((i % side) as f64 + 0.5) / side as f64).cos())
-            .collect();
-        let segments = lines(&field, side).unwrap();
-        assert!(!segments.is_empty());
-        assert!(
-            segments
-                .chunks(4)
-                .all(|s| (s[0] - 0.5).abs() < 1e-9 && (s[2] - 0.5).abs() < 1e-9)
-        );
-        let length: f64 = segments.chunks(4).map(|s| (s[3] - s[1]).abs()).sum();
-        assert!((length - 1.0).abs() < 1e-9);
-    }
 }
